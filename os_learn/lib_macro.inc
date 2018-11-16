@@ -1,0 +1,7 @@
+%MACRO INITREG 0
+    MOV  AX,CS
+    MOV  ES,AX
+    MOV  SS,AX
+    MOV  DS,AX
+    MOV  FS,AX
+%ENDMACRO

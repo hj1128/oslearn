@@ -1,12 +1,11 @@
+%INCLUDE "lib_macro.inc"
+
   ORG  0100H
   JMP  LABEL_BEGIN
 
     LABEL_BEGIN:
-      MOV  AX,CS
-      MOV  ES,AX
-      MOV  SS,AX
-      MOV  DS,AX
-      MOV  FS,AX
+      INITREG
+
       MOV  AX,0B800H
       MOV  GS,AX
       MOV  AH,0CH
