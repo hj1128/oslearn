@@ -5,3 +5,25 @@
     MOV  DS,AX
     MOV  FS,AX
 %ENDMACRO
+
+%MACRO SHOWCHAR 0
+      PUSH AX
+      MOV  AX,0B800H
+      MOV  GS,AX
+      POP  AX
+      MOV  AH,0CH
+      MOV  EDI,[_POSITION]
+      MOV  [GS:EDI],AX
+      ADD  EDI,2
+      MOV  [_POSITION],EDI
+%ENDMACRO
+
+
+%MACRO SHOWAX_HEX 0
+      PUSH AX
+      SHR  AX,8
+      CALL SHOWAL_HEX
+      POP  AX
+      AND  AX,00FFH
+      CALL SHOWAL_HEX
+%ENDMACRO
