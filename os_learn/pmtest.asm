@@ -12,6 +12,7 @@
   LABEL_DESC_P2R             :  Descriptor    0,            0FFFFH, DA_C
   LABEL_DESC_CGCODE          :  Descriptor    0,     CGCODELEN - 1, DA_C + DA_32
   LABEL_DESC_CGATE           :  Gate SELECTORCGCODE,    0,       0, DA_386CGate
+  LABEL_DESC_LDT             :  Descriptor    0,        LDTLEN - 1, DA_LDT
   
   GDTLEN                        EQU  $ - LABEL_GDT
   GDTPTR                        DW   GDTLEN - 1
@@ -23,7 +24,15 @@
   SELECTORP2R                   EQU  LABEL_DESC_P2R    - LABEL_GDT
   SELECTORCGCODE                EQU  LABEL_DESC_CGCODE - LABEL_GDT
   SELECTORCGATE                 EQU  LABEL_DESC_CGATE  - LABEL_GDT
+  SELECTORLDT                   EQU  LABEL_DESC_LDT    - LABEL_GDT
 ;END OF [SECTION .GDT]
+
+[SECTION .LDT]
+  LABEL_LDT:
+  LABEL_DESC_LCODE           :  Descriptor    0,      LCODELEN - 1, DA_C + DA_32
+  LDTLEN                        EQU  $ - LABEL_LDT
+  SELECTORLCODE                 EQU  LABEL_DESC_LCODE  - LABEL_LDT + SA_TIL
+;END OF [SECTION .LDT]
 
 [SECTION .DATA]
   LABEL_DATA:
@@ -46,6 +55,8 @@
       INITDESC LABEL_CODE32  , LABEL_DESC_CODE32
       INITDESC LABEL_P2R     , LABEL_DESC_P2R
       INITDESC LABEL_CGCODE  , LABEL_DESC_CGCODE
+      INITDESC LABEL_LDT     , LABEL_DESC_LDT
+      INITDESC LABEL_LCODE   , LABEL_DESC_LCODE
       
       INITGDT
       
@@ -110,9 +121,30 @@
     ADD  EDI,2
     MOV  [POSITION],EDI
     
-    JMP  SELECTORP2R:0
+    MOV  AX,SELECTORLDT
+    LLDT AX
+    JMP  SELECTORLCODE:0
   CGCODELEN                     EQU  $ - LABEL_CGCODE
 ;END OF [SECTION .CGCODE]
+
+[SECTION .LCODE]
+[BITS 32]
+  LABEL_LCODE:
+    MOV  AX,SELECTORDATA
+    MOV  DS,AX
+    MOV  AX,SELECTORVIDEO
+    MOV  GS,AX
+
+    MOV  AH,0CH
+    MOV  AL,'L'
+    MOV  EDI,[POSITION]
+    MOV  [GS:EDI],AX
+    ADD  EDI,2
+    MOV  [POSITION],EDI
+    
+    JMP  SELECTORP2R:0
+  LCODELEN                      EQU  $ - LABEL_LCODE
+;END OF [SECTION .LCODE]
 
 [SECTION .P2R]
 ALIGN 32
