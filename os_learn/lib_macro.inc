@@ -6,6 +6,17 @@
     MOV  FS,AX
 %ENDMACRO
 
+%MACRO  INITDESC 2
+      XOR  EAX,EAX
+      MOV  AX,CS
+      SHL  EAX,4
+      ADD  EAX,%1
+      MOV  WORD [%2 + 2],AX
+      SHR  EAX,10H
+      MOV  BYTE [%2 + 4],AL
+      MOV  BYTE [%2 + 7],AH
+%ENDMACRO
+
 %MACRO SHOWCHAR 0
       PUSH AX
       MOV  AX,0B800H
@@ -18,12 +29,26 @@
       MOV  [_POSITION],EDI
 %ENDMACRO
 
+%MACRO SHOWRETURN 0
+      MOV  EAX,[_POSITION]
+      MOV  BL,160
+      DIV  BL
+      AND  EAX,0FFH
+      INC  EAX
+      MOV  BL,160
+      MUL  BL
+      MOV  [_POSITION],EAX
+%ENDMACRO
 
-%MACRO SHOWAX_HEX 0
-      PUSH AX
-      SHR  AX,8
-      CALL SHOWAL_HEX
-      POP  AX
-      AND  AX,00FFH
-      CALL SHOWAL_HEX
+%MACRO SHOWEAX_HEX 0
+      PUSH EAX
+      SHR  EAX,16
+      CALL SHOWAX_HEX
+      POP  EAX
+      AND  EAX,0000FFFFH
+      CALL SHOWAX_HEX
+      MOV  AL,'H'
+      SHOWCHAR
+      MOV  AL,' '
+      SHOWCHAR
 %ENDMACRO

@@ -19,3 +19,12 @@ SHOWAL_HEX:
       POP  AX
       CALL SHOWAL_LOW_HEX
       RET     
+
+SHOWAX_HEX:
+      PUSH AX
+      SHR  AX,8
+      CALL SHOWAL_HEX
+      POP  AX
+      AND  AX,00FFH
+      CALL SHOWAL_HEX
+      RET
