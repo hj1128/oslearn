@@ -48,6 +48,17 @@
       MOV  [_POSITION],EAX
 %ENDMACRO
 
+%MACRO SHOWRETURN_P 0
+      MOV  EAX,[POSITION]
+      MOV  BL,160
+      DIV  BL
+      AND  EAX,0FFH
+      INC  EAX
+      MOV  BL,160
+      MUL  BL
+      MOV  [POSITION],EAX
+%ENDMACRO
+
 %MACRO SHOWEAX_HEX 0
       PUSH EAX
       SHR  EAX,16
@@ -59,4 +70,16 @@
       SHOWCHAR
       MOV  AL,' '
       SHOWCHAR
+%ENDMACRO
+%MACRO SHOWEAX_HEX_P 0
+      PUSH EAX
+      SHR  EAX,16
+      CALL SHOWAX_HEX_P
+      POP  EAX
+      AND  EAX,0000FFFFH
+      CALL SHOWAX_HEX_P
+      MOV  AL,'H'
+      CALL SHOWCHAR_P
+      MOV  AL,' '
+      CALL SHOWCHAR_P
 %ENDMACRO
