@@ -10,7 +10,6 @@ SHOWAL_LOW_HEX:
       .SHOWCHAR_HEX:
         SHOWCHAR
       RET
-
 SHOWAL_HEX:
       PUSH AX
       SHR  AX,4
@@ -18,7 +17,6 @@ SHOWAL_HEX:
       POP  AX
       CALL SHOWAL_LOW_HEX
       RET     
-
 SHOWAX_HEX:
       PUSH AX
       SHR  AX,8
@@ -26,6 +24,20 @@ SHOWAX_HEX:
       POP  AX
       AND  AX,00FFH
       CALL SHOWAL_HEX
+      RET
+SHOWEAX_HEX:
+      PUSH EAX
+      PUSH EAX
+      SHR  EAX,16
+      CALL SHOWAX_HEX
+      POP  EAX
+      AND  EAX,0000FFFFH
+      CALL SHOWAX_HEX
+      MOV  AL,'H'
+      SHOWCHAR
+      MOV  AL,' '
+      SHOWCHAR
+      POP  EAX
       RET
 
 MEMCHK:
@@ -46,4 +58,36 @@ MEMCHK:
 	  MOV  DWORD [_MCRNUMBER],0
 	.MEMCHKOK:
 	  NOP
+      RET
+DISPMEM:
+      MOV  ECX,[_MCRNUMBER]
+      MOV  ESI,_MEMCHKBUF
+      CLD
+      .DISPMEMLOOP:
+        MOV  EDI,_ARDSTRUCT
+        MOV  EDX,5
+        .ARDSTRUCTLOOP:
+	  MOV  EAX,[ESI]
+	  STOSD                 ;EDI自动增加,但此命令在保护模式下好像不起作用。但在例子中又可以用？
+	  CALL SHOWEAX_HEX
+	  ADD ESI,4
+	  DEC EDX
+	  TEST EDX,EDX
+	  JZ  .ARDSTRUCTLOOPOK
+	  JMP .ARDSTRUCTLOOP
+	.ARDSTRUCTLOOPOK:
+	  NOP
+	  CMP DWORD [_ARDSTRUCTTYPE],1
+	  JNE .CHANGELINE
+	  MOV EAX,[_BASEADDRLOW]
+	  ADD EAX,[_LENGTHLOW]
+	  CMP EAX,[_MEMSIZE]
+	  JB  .CHANGELINE
+	  MOV [_MEMSIZE],EAX
+        .CHANGELINE:
+          SHOWRETURN
+	LOOP  .DISPMEMLOOP
+        MOV  EAX,[_MEMSIZE]
+	CALL SHOWEAX_HEX
+	SHOWRETURN
       RET
