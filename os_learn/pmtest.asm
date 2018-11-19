@@ -1,5 +1,7 @@
 %INCLUDE "lib_macro.inc"
 %INCLUDE "pm.inc"
+PAGEDIR                         EQU  200000H
+PAGETBL                         EQU  201000H
 
   ORG  0100H
   JMP  LABEL_BEGIN
@@ -16,30 +18,32 @@
   LABEL_DESC_LDT             :  Descriptor    0,        LDTLEN - 1, DA_LDT
   LABEL_DESC_STACK3          :  Descriptor    0,       TOPOFSTACK3, DA_DRWA     + DA_32 + DA_DPL3
   LABEL_DESC_CODE3           :  Descriptor    0,      CODE3LEN - 1, DA_C        + DA_32 + DA_DPL3
-  LABEL_DESC_TSS             :  Descriptor    0,        TSSLEN - 1, DA_386TSS
+  LABEL_DESC_PAGEDIR         :  Descriptor    PAGEDIR,        4095, DA_DRW
+  LABEL_DESC_PAGETBL         :  Descriptor    PAGETBL,        1023, DA_DRW|DA_LIMIT_4K
   
   GDTLEN                        EQU  $ - LABEL_GDT
   GDTPTR                        DW   GDTLEN - 1
                                 DD   0
-  SELECTORNORMAL                EQU  LABEL_DESC_NORMAL - LABEL_GDT
-  SELECTORVIDEO                 EQU  LABEL_DESC_VIDEO  - LABEL_GDT
-  SELECTORDATA                  EQU  LABEL_DESC_DATA   - LABEL_GDT  
-  SELECTORSTACK                 EQU  LABEL_DESC_STACK  - LABEL_GDT
-  SELECTORCODE32                EQU  LABEL_DESC_CODE32 - LABEL_GDT
-  SELECTORP2R                   EQU  LABEL_DESC_P2R    - LABEL_GDT
-  SELECTORCGCODE                EQU  LABEL_DESC_CGCODE - LABEL_GDT
-  SELECTORCGATE                 EQU  LABEL_DESC_CGATE  - LABEL_GDT + SA_RPL3
-  SELECTORLDT                   EQU  LABEL_DESC_LDT    - LABEL_GDT
-  SELECTORSTACK3                EQU  LABEL_DESC_STACK3 - LABEL_GDT + SA_RPL3
-  SELECTORCODE3                 EQU  LABEL_DESC_CODE3  - LABEL_GDT + SA_RPL3
-  SELECTORTSS                   EQU  LABEL_DESC_TSS    - LABEL_GDT
+  SELECTORNORMAL                EQU  LABEL_DESC_NORMAL  - LABEL_GDT
+  SELECTORVIDEO                 EQU  LABEL_DESC_VIDEO   - LABEL_GDT
+  SELECTORDATA                  EQU  LABEL_DESC_DATA    - LABEL_GDT  
+  SELECTORSTACK                 EQU  LABEL_DESC_STACK   - LABEL_GDT
+  SELECTORCODE32                EQU  LABEL_DESC_CODE32  - LABEL_GDT
+  SELECTORP2R                   EQU  LABEL_DESC_P2R     - LABEL_GDT
+  SELECTORCGCODE                EQU  LABEL_DESC_CGCODE  - LABEL_GDT
+  SELECTORCGATE                 EQU  LABEL_DESC_CGATE   - LABEL_GDT + SA_RPL3
+  SELECTORLDT                   EQU  LABEL_DESC_LDT     - LABEL_GDT
+  SELECTORSTACK3                EQU  LABEL_DESC_STACK3  - LABEL_GDT + SA_RPL3
+  SELECTORCODE3                 EQU  LABEL_DESC_CODE3   - LABEL_GDT + SA_RPL3
+  SELECTORPAGEDIR               EQU  LABEL_DESC_PAGEDIR - LABEL_GDT
+  SELECTORPAGETBL               EQU  LABEL_DESC_PAGETBL - LABEL_GDT
 ;END OF [SECTION .GDT]
 
 [SECTION .LDT]
   LABEL_LDT:
   LABEL_DESC_LCODE           :  Descriptor    0,      LCODELEN - 1, DA_C + DA_32
   LDTLEN                        EQU  $ - LABEL_LDT
-  SELECTORLCODE                 EQU  LABEL_DESC_LCODE  - LABEL_LDT + SA_TIL
+  SELECTORLCODE                 EQU  LABEL_DESC_LCODE   - LABEL_LDT + SA_TIL
 ;END OF [SECTION .LDT]
 
 [SECTION .DATA]
@@ -86,39 +90,6 @@ ALIGN 32
   TOPOFSTACK3                   EQU  $ - LABEL_STACK3 - 1
 ;END OF [SECTION .STACK3]
 
-[SECTION .TSS]
-  LABEL_TSS:
-    DD    0
-    DD    TOPOFSTACK
-    DD    SELECTORSTACK
-    DD    0
-    DD    0
-    DD    0
-    DD    0
-    DD    0
-    DD    0
-    DD    0
-    DD    0
-    DD    0
-    DD    0
-    DD    0
-    DD    0
-    DD    0
-    DD    0
-    DD    0
-    DD    0
-    DD    0
-    DD    0
-    DD    0
-    DD    0
-    DD    0
-    DD    0
-    DW    0
-    DW    $ - LABEL_TSS + 2
-    DD    0FFH
-  TSSLEN                        EQU  $ - LABEL_TSS
-;END OF [SECTION .TSS]
-
 [SECTION .REAL]  
 [BITS 16]
   LABEL_BEGIN:
@@ -131,7 +102,7 @@ ALIGN 32
     MOV  EAX,[_MCRNUMBER]
     CALL SHOWEAX_HEX 
     SHOWRETURN
-    ;CALL DISPMEM
+    CALL DISPMEM
 
     INITDESC LABEL_DATA    , LABEL_DESC_DATA
     INITDESC LABEL_STACK   , LABEL_DESC_STACK
@@ -142,7 +113,6 @@ ALIGN 32
     INITDESC LABEL_LCODE   , LABEL_DESC_LCODE
     INITDESC LABEL_STACK3  , LABEL_DESC_STACK3
     INITDESC LABEL_CODE3   , LABEL_DESC_CODE3
-    INITDESC LABEL_TSS     , LABEL_DESC_TSS
     INITGDT
     LGDT [GDTPTR]
     CLI
@@ -162,10 +132,15 @@ ALIGN 32
 [SECTION .CODE32]
 [BITS 32]
   LABEL_CODE32:
+
     MOV  AX,SELECTORDATA
     MOV  DS,AX
+    MOV  AX,SELECTORDATA
+    MOV  ES,AX
     MOV  AX,SELECTORVIDEO
     MOV  GS,AX
+
+    CALL SETPAGE
 
     MOV  AL,'P'
     SHOWCHAR_P
@@ -177,10 +152,8 @@ ALIGN 32
     
     CALL DISPMEM_P
 
-    ;MOV  AX,SELECTORTSS
-    ;LTR  AX
+
     JMP2R3
-    ;CALL SELECTORCGATE:0
   %INCLUDE "lib_p.inc"
   CODE32LEN                      EQU  $ - LABEL_CODE32
 ;END OF [SECTION .CODE32]  
@@ -195,7 +168,7 @@ ALIGN 32
 
     MOV  AL,'3'
     SHOWCHAR_P
-
+    
     CALL SELECTORCGATE:0
   CODE3LEN                      EQU  $ - LABEL_CODE3
 ;END OF [SECTION .CODE3]
@@ -243,7 +216,8 @@ ALIGN 32
 [BITS 16]
   LABEL_P2R:
     INITREGP2R
-    CANCELCR0PE
+    ;CANCELCR0PE
+    CANCELCR0PE_PG
   LABEL_GOBACKTO_REAL:
     JMP  0:LABEL_REAL_ENTRY
 ;END OF [SECTION .P2R]        

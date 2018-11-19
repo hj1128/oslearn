@@ -1,0 +1,41 @@
+  LABEL_DESC_TSS             :  Descriptor    0,        TSSLEN - 1, DA_386TSS
+  SELECTORTSS                   EQU  LABEL_DESC_TSS     - LABEL_GDT
+
+
+[SECTION .TSS]
+  LABEL_TSS:
+    DD    0
+    DD    TOPOFSTACK
+    DD    SELECTORSTACK
+    DD    0
+    DD    0
+    DD    0
+    DD    0
+    DD    0
+    DD    0
+    DD    0
+    DD    0
+    DD    0
+    DD    0
+    DD    0
+    DD    0
+    DD    0
+    DD    0
+    DD    0
+    DD    0
+    DD    0
+    DD    0
+    DD    0
+    DD    0
+    DD    0
+    DD    0
+    DW    0
+    DW    $ - LABEL_TSS + 2
+    DD    0FFH
+  TSSLEN                        EQU  $ - LABEL_TSS
+;END OF [SECTION .TSS]
+
+    ;MOV  AX,SELECTORTSS
+    ;LTR  AX
+
+    INITDESC LABEL_TSS     , LABEL_DESC_TSS

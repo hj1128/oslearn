@@ -61,11 +61,9 @@ DISPMEM_P:
         MOV  EDI,ARDSTRUCT
         MOV  EDX,5
         .ARDSTRUCTLOOP:
-	  MOV  EAX, [ESI]
-	  MOV  [EDI],EAX
+	  LODSD                 ;DS:ESI--->EAX,ESI自动增加
+	  STOSD                 ;EAX--->ES:EDI,EDI自动增加
 	  CALL SHOWEAX_HEX_P
-	  ADD  EDI,4
-	  ADD  ESI,4
 	  DEC  EDX
 	  TEST EDX,EDX
 	  JZ  .ARDSTRUCTLOOPOK
@@ -85,4 +83,50 @@ DISPMEM_P:
         MOV  EAX,[MEMSIZE]
 	CALL SHOWEAX_HEX_P
 	SHOWRETURN_P
+      RET
+
+SETPAGE:
+      XOR  EDX,EDX
+      MOV  EAX,[MEMSIZE]
+      MOV  EBX,400000H
+      DIV  EBX
+      MOV  ECX,EAX
+      TEST EDX,EDX
+      JZ   .NOREMAINDER
+      INC  ECX
+      .NOREMAINDER:
+        PUSH ECX
+      MOV  AX,SELECTORPAGEDIR
+      MOV  ES,AX
+      ;MOV  ECX,1024
+      XOR  EDI,EDI
+      XOR  EAX,EAX
+      MOV  EAX,PAGETBL|PG_P|PG_USU|PG_RWW
+      .PAGEDIRLOOP:
+        STOSD
+	ADD EAX,4096
+	LOOP .PAGEDIRLOOP
+
+      MOV  AX,SELECTORPAGETBL
+      MOV  ES,AX
+      POP  EAX
+      MOV  EBX,1024
+      MUL  EBX
+      MOV  ECX,EAX
+      ;MOV  ECX,1024*1024
+      XOR  EDI,EDI
+      XOR  EAX,EAX
+      MOV  EAX,PG_P|PG_USU|PG_RWW
+      .PAGETBLOOP:
+        STOSD
+	ADD EAX,4096
+	LOOP .PAGETBLOOP
+
+      MOV  EAX,PAGEDIR
+      MOV  CR3,EAX
+      MOV  EAX,CR0
+      OR   EAX,80000000H
+      MOV  CR0,EAX
+      NOP
+      NOP
       RET

@@ -68,7 +68,7 @@ DISPMEM:
         MOV  EDX,5
         .ARDSTRUCTLOOP:
 	  MOV  EAX,[ESI]
-	  STOSD                 ;EDI自动增加,但此命令在保护模式下好像不起作用,是个大坑
+	  STOSD                 ;EDI自动增加,对应ES:EDI   LODSD对应DS:ESI
 	  CALL SHOWEAX_HEX
 	  ADD ESI,4
 	  DEC EDX
