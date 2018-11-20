@@ -1,7 +1,15 @@
 %INCLUDE "lib_macro.inc"
 %INCLUDE "pm.inc"
-PAGEDIR                         EQU  200000H
-PAGETBL                         EQU  201000H
+
+PAGEDIRBASE0                    EQU  200000H
+PAGETBLBASE0                    EQU  201000H
+PAGEDIRBASE1                    EQU  210000H
+PAGETBLBASE1                    EQU  211000H
+
+LINEARADDRDEMO                  EQU  00401000H
+PROCFOO                         EQU  00401000H
+PROCBAR                         EQU  00501000H
+PROCPAGINGDEMO                  EQU  00301000H
 
   ORG  0100H
   JMP  LABEL_BEGIN
@@ -18,8 +26,10 @@ PAGETBL                         EQU  201000H
   LABEL_DESC_LDT             :  Descriptor    0,        LDTLEN - 1, DA_LDT
   LABEL_DESC_STACK3          :  Descriptor    0,       TOPOFSTACK3, DA_DRWA     + DA_32 + DA_DPL3
   LABEL_DESC_CODE3           :  Descriptor    0,      CODE3LEN - 1, DA_C        + DA_32 + DA_DPL3
-  LABEL_DESC_PAGEDIR         :  Descriptor    PAGEDIR,        4095, DA_DRW
-  LABEL_DESC_PAGETBL         :  Descriptor    PAGETBL,        1023, DA_DRW|DA_LIMIT_4K
+  LABEL_DESC_PAGEDIR         :  Descriptor    PAGEDIRBASE1,   4095, DA_DRW
+  LABEL_DESC_PAGETBL         :  Descriptor    PAGETBLBASE1,   1023, DA_DRW|DA_LIMIT_4K
+  LABEL_DESC_FLAT_C          :  Descriptor    0,           0FFFFFH, DA_CR|DA_32|DA_LIMIT_4K                ;0-4G
+  LABEL_DESC_FLAT_RW         :  Descriptor    0,           0FFFFFH, DA_DRW|DA_LIMIT_4K                     ;0-4G
   
   GDTLEN                        EQU  $ - LABEL_GDT
   GDTPTR                        DW   GDTLEN - 1
@@ -37,6 +47,8 @@ PAGETBL                         EQU  201000H
   SELECTORCODE3                 EQU  LABEL_DESC_CODE3   - LABEL_GDT + SA_RPL3
   SELECTORPAGEDIR               EQU  LABEL_DESC_PAGEDIR - LABEL_GDT
   SELECTORPAGETBL               EQU  LABEL_DESC_PAGETBL - LABEL_GDT
+  SELECTORFLATC                 EQU  LABEL_DESC_FLAT_C  - LABEL_GDT
+  SELECTORFLATRW                EQU  LABEL_DESC_FLAT_RW - LABEL_GDT
 ;END OF [SECTION .GDT]
 
 [SECTION .LDT]
@@ -54,6 +66,7 @@ ALIGN 32
     _MEMCHKBUF               :  TIMES  256  DD  0
     _MCRNUMBER               :  DD   0
     _MEMSIZE                 :  DD   0
+    _PAGETABLENUMBER         :  DD   0
     _ARDSTRUCT               :
       _BASEADDRLOW           :  DD   0
       _BASEADDRHIGH          :  DD   0
@@ -61,17 +74,18 @@ ALIGN 32
       _LENGTHHIGH            :  DD   0
       _ARDSTRUCTTYPE         :  DD   0
 
-    PMMESSAGE                   EQU  _PMMESSAGE     - $$
-    POSITION                    EQU  _POSITION      - $$
-    MEMCHKBUF                   EQU  _MEMCHKBUF     - $$
-    MCRNUMBER                   EQU  _MCRNUMBER     - $$
-    MEMSIZE                     EQU  _MEMSIZE       - $$
-    ARDSTRUCT                   EQU  _ARDSTRUCT     - $$
-      BASEADDRLOW               EQU  _BASEADDRLOW   - $$
-      BASEADDRHIGH              EQU  _BASEADDRHIGH  - $$
-      LENGTHLOW                 EQU  _LENGTHLOW     - $$
-      LENGTHHIGH                EQU  _LENGTHHIGH    - $$
-      ARDSTRUCTTYPE             EQU  _ARDSTRUCTTYPE - $$
+    PMMESSAGE                   EQU  _PMMESSAGE       - $$
+    POSITION                    EQU  _POSITION        - $$
+    MEMCHKBUF                   EQU  _MEMCHKBUF       - $$
+    MCRNUMBER                   EQU  _MCRNUMBER       - $$
+    MEMSIZE                     EQU  _MEMSIZE         - $$
+    PAGETABLENUMBER             EQU  _PAGETABLENUMBER - $$
+    ARDSTRUCT                   EQU  _ARDSTRUCT       - $$
+      BASEADDRLOW               EQU  _BASEADDRLOW     - $$
+      BASEADDRHIGH              EQU  _BASEADDRHIGH    - $$
+      LENGTHLOW                 EQU  _LENGTHLOW       - $$
+      LENGTHHIGH                EQU  _LENGTHHIGH      - $$
+      ARDSTRUCTTYPE             EQU  _ARDSTRUCTTYPE   - $$
 
   DATALEN                       EQU  $ - LABEL_DATA
 ;END OF [SECTION .DATA]
