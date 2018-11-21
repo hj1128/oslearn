@@ -84,7 +84,6 @@ DISPMEM_P:
 	CALL SHOWEAX_HEX_P
 	SHOWRETURN_P
       RET
-
 SETPAGE:
       XOR  EDX,EDX
       MOV  EAX,[MEMSIZE]
@@ -129,4 +128,200 @@ SETPAGE:
       MOV  CR0,EAX
       NOP
       NOP
+      RET
+SETPAGE2:
+      XOR  EDX,EDX
+      MOV  EAX,[MEMSIZE]
+      MOV  EBX,400000H
+      DIV  EBX
+      MOV  ECX,EAX
+      TEST EDX,EDX
+      JZ   .NOREMAINDER
+      INC  ECX
+      .NOREMAINDER:
+        MOV [PAGETABLENUMBER],ECX
+        ;PUSH ECX
+      MOV  AX,SELECTORFLATRW
+      MOV  ES,AX
+      ;MOV  ECX,1024
+      ;XOR  EDI,EDI
+      MOV  EDI,PAGEDIRBASE0
+      XOR  EAX,EAX
+      MOV  EAX,PAGETBLBASE0|PG_P|PG_USU|PG_RWW
+      .PAGEDIRLOOP:
+        STOSD
+	ADD EAX,4096
+	LOOP .PAGEDIRLOOP
+
+      ;MOV  AX,SELECTORPAGETBL
+      ;MOV  ES,AX
+      ;POP  EAX
+      MOV  EAX,[PAGETABLENUMBER]
+      MOV  EBX,1024
+      MUL  EBX
+      MOV  ECX,EAX
+      ;MOV  ECX,1024*1024
+      ;XOR  EDI,EDI
+      MOV  EDI,PAGETBLBASE0
+      XOR  EAX,EAX
+      MOV  EAX,PG_P|PG_USU|PG_RWW
+      .PAGETBLOOP:
+        STOSD
+	ADD EAX,4096
+	LOOP .PAGETBLOOP
+
+      MOV  EAX,PAGEDIRBASE0
+      MOV  CR3,EAX
+      MOV  EAX,CR0
+      OR   EAX,80000000H
+      MOV  CR0,EAX
+      NOP
+      NOP
+      RET
+MEMCPY:
+      PUSH EBP
+      MOV  EBP,ESP
+
+      PUSH ESI
+      PUSH EDI
+      PUSH ECX
+
+      MOV  EDI,[EBP + 8]  ;Destination
+      MOV  ESI,[EBP + 12] ;Source
+      MOV  ECX,[EBP + 16] ;Counter
+
+      .MEMCPY1:
+        CMP ECX,0         ;判断计数器
+	JZ  .MEMCPY2      ;为0时跳出
+
+        ;逐字节移动
+	MOV AL,[DS:ESI]
+	INC ESI
+	MOV BYTE[ES:EDI],AL
+	INC EDI
+
+	DEC ECX           ;计数器减1
+	JMP .MEMCPY1
+      
+      .MEMCPY2:
+        MOV EAX,[EBP + 8] ;返回值
+
+      POP ECX
+      POP EDI
+      POP ESI
+      MOV ESP,EBP
+      POP EBP
+     
+      RET
+
+PAGINGDEMO:
+      MOV  AX,CS
+      MOV  DS,AX
+      MOV  AX,SELECTORFLATRW
+      MOV  ES,AX
+
+      PUSH LENFOO
+      PUSH OFFSETFOO
+      PUSH PROCFOO
+      CALL MEMCPY
+      ADD  ESP,12
+
+      PUSH LENBAR
+      PUSH OFFSETBAR
+      PUSH PROCBAR
+      CALL MEMCPY
+      ADD  ESP,12
+
+      PUSH LENPAGINGDEMOALL
+      PUSH OFFSETPAGINGDEMOPROC
+      PUSH PROCPAGINGDEMO
+      CALL MEMCPY
+      ADD  ESP,12
+
+      MOV  AX,SELECTORDATA
+      MOV  DS,AX
+      MOV  ES,AX
+
+      CALL SETPAGE2
+      CALL SELECTORFLATC:PROCPAGINGDEMO
+      CALL PSWITCH
+      CALL SELECTORFLATC:PROCPAGINGDEMO
+
+      RET
+
+PAGINGDEMOPROC:
+OFFSETPAGINGDEMOPROC            EQU  PAGINGDEMOPROC - $$
+      MOV  EAX,LINEARADDRDEMO
+      CALL EAX
+      RETF
+LENPAGINGDEMOALL                EQU  $ - PAGINGDEMOPROC
+
+FOO:
+OFFSETFOO                       EQU  FOO - $$
+      MOV  AH,0CH
+      MOV  AL,'F'
+      MOV  [GS:((80*17 + 0)*2)],AX
+      MOV  AL,'O'
+      MOV  [GS:((80*17 + 1)*2)],AX
+      MOV  [GS:((80*17 + 2)*2)],AX
+      RET
+LENFOO                          EQU  $ - FOO
+
+BAR:
+OFFSETBAR                       EQU  BAR - $$
+      MOV  AH,0BH
+      MOV  AL,'B'
+      MOV  [GS:((80*18 + 0)*2)],AX
+      MOV  AL,'A'
+      MOV  [GS:((80*18 + 1)*2)],AX
+      MOV  AL,'R'
+      MOV  [GS:((80*18 + 2)*2)],AX
+      RET
+LENBAR                          EQU  $ - BAR
+
+PSWITCH:
+      ;初始化页目录
+      MOV  AX,SELECTORFLATRW
+      MOV  ES,AX
+      MOV  EDI,PAGEDIRBASE1
+      XOR  EAX,EAX
+      MOV  EAX,PAGETBLBASE1|PG_P|PG_USU|PG_RWW
+      MOV  ECX,[PAGETABLENUMBER]
+      .PSWITCH1:
+        STOSD
+	ADD EAX,4096
+	LOOP .PSWITCH1
+
+      ;初始化页表
+      MOV  EAX,[PAGETABLENUMBER]
+      MOV  EBX,1024
+      MUL  EBX
+      MOV  ECX,EAX
+      MOV  EDI,PAGETBLBASE1
+      XOR  EAX,EAX
+      MOV  EAX,PG_P|PG_USU|PG_RWW
+      .PSWITCH2:
+        STOSD
+	ADD EAX,4096
+	LOOP .PSWITCH2
+
+      MOV  EAX,LINEARADDRDEMO
+      SHR  EAX,22
+      MOV  EBX,4096
+      MUL  EBX
+      MOV  ECX,EAX
+      MOV  EAX,LINEARADDRDEMO
+      SHR  EAX,12
+      AND  EAX,03FFH
+      MOV  EBX,4
+      MUL  EBX
+      ADD  EAX,ECX
+      ADD  EAX,PAGETBLBASE1
+      MOV  DWORD [ES:EAX],PROCBAR|PG_P|PG_USU|PG_RWW
+
+      MOV  EAX,PAGEDIRBASE1
+      MOV  CR3,EAX
+      NOP
+      NOP
+
       RET

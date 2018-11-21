@@ -19,7 +19,7 @@ PROCPAGINGDEMO                  EQU  00301000H
   LABEL_DESC_VIDEO           :  Descriptor    0B8000H,      0FFFFH, DA_DRW              + DA_DPL3  
   LABEL_DESC_DATA            :  Descriptor    0,       DATALEN - 1, DA_DRW              + DA_DPL3
   LABEL_DESC_STACK           :  Descriptor    0,        TOPOFSTACK, DA_DRWA     + DA_32
-  LABEL_DESC_CODE32          :  Descriptor    0,     CODE32LEN - 1, DA_C        + DA_32
+  LABEL_DESC_CODE32          :  Descriptor    0,     CODE32LEN - 1, DA_CR       + DA_32
   LABEL_DESC_P2R             :  Descriptor    0,            0FFFFH, DA_C
   LABEL_DESC_CGCODE          :  Descriptor    0,     CGCODELEN - 1, DA_C        + DA_32
   LABEL_DESC_CGATE           :  Gate SELECTORCGCODE,    0,       0, DA_386CGate         + DA_DPL3
@@ -60,9 +60,11 @@ PROCPAGINGDEMO                  EQU  00301000H
 
 [SECTION .DATA]
 ALIGN 32
+[BITS 32]
   LABEL_DATA:
     _PMMESSAGE               :  DB   "NOW IN PROTECT MODE!^-^",0
     _POSITION                :  DD   (80*2+0)*2
+    _SPVALUEINREALMODE       :  DW   0
     _MEMCHKBUF               :  TIMES  256  DD  0
     _MCRNUMBER               :  DD   0
     _MEMSIZE                 :  DD   0
@@ -74,18 +76,19 @@ ALIGN 32
       _LENGTHHIGH            :  DD   0
       _ARDSTRUCTTYPE         :  DD   0
 
-    PMMESSAGE                   EQU  _PMMESSAGE       - $$
-    POSITION                    EQU  _POSITION        - $$
-    MEMCHKBUF                   EQU  _MEMCHKBUF       - $$
-    MCRNUMBER                   EQU  _MCRNUMBER       - $$
-    MEMSIZE                     EQU  _MEMSIZE         - $$
-    PAGETABLENUMBER             EQU  _PAGETABLENUMBER - $$
-    ARDSTRUCT                   EQU  _ARDSTRUCT       - $$
-      BASEADDRLOW               EQU  _BASEADDRLOW     - $$
-      BASEADDRHIGH              EQU  _BASEADDRHIGH    - $$
-      LENGTHLOW                 EQU  _LENGTHLOW       - $$
-      LENGTHHIGH                EQU  _LENGTHHIGH      - $$
-      ARDSTRUCTTYPE             EQU  _ARDSTRUCTTYPE   - $$
+    PMMESSAGE                   EQU  _PMMESSAGE           - $$
+    POSITION                    EQU  _POSITION            - $$
+    SPVALUEINREALMODE           EQU  _SPVALUEINREALMODE   - $$
+    MEMCHKBUF                   EQU  _MEMCHKBUF           - $$
+    MCRNUMBER                   EQU  _MCRNUMBER           - $$
+    MEMSIZE                     EQU  _MEMSIZE             - $$
+    PAGETABLENUMBER             EQU  _PAGETABLENUMBER     - $$
+    ARDSTRUCT                   EQU  _ARDSTRUCT           - $$
+      BASEADDRLOW               EQU  _BASEADDRLOW         - $$
+      BASEADDRHIGH              EQU  _BASEADDRHIGH        - $$
+      LENGTHLOW                 EQU  _LENGTHLOW           - $$
+      LENGTHHIGH                EQU  _LENGTHHIGH          - $$
+      ARDSTRUCTTYPE             EQU  _ARDSTRUCTTYPE       - $$
 
   DATALEN                       EQU  $ - LABEL_DATA
 ;END OF [SECTION .DATA]
@@ -109,6 +112,7 @@ ALIGN 32
   LABEL_BEGIN:
     INITREG
     MOV  [LABEL_GOBACKTO_REAL + 3],AX
+    MOV  [_SPVALUEINREALMODE],SP
     MOV  AL,'R'
     SHOWCHAR
 
@@ -116,7 +120,7 @@ ALIGN 32
     MOV  EAX,[_MCRNUMBER]
     CALL SHOWEAX_HEX 
     SHOWRETURN
-    CALL DISPMEM
+    ;CALL DISPMEM
 
     INITDESC LABEL_DATA    , LABEL_DESC_DATA
     INITDESC LABEL_STACK   , LABEL_DESC_STACK
@@ -135,6 +139,7 @@ ALIGN 32
     JMP  DWORD SELECTORCODE32:0
   LABEL_REAL_ENTRY:
     INITREG
+    MOV  SP,[_SPVALUEINREALMODE]
     CLOSEA20
     STI
        
@@ -146,16 +151,19 @@ ALIGN 32
 [SECTION .CODE32]
 [BITS 32]
   LABEL_CODE32:
-
     MOV  AX,SELECTORDATA
     MOV  DS,AX
-    MOV  AX,SELECTORDATA
     MOV  ES,AX
     MOV  AX,SELECTORVIDEO
     MOV  GS,AX
+    MOV  AX,SELECTORSTACK
+    MOV  SS,AX
+    MOV  ESP,TOPOFSTACK
 
-    CALL SETPAGE
-
+    CALL DISPMEM_P
+    ;CALL SETPAGE
+    CALL PAGINGDEMO
+      
     MOV  AL,'P'
     SHOWCHAR_P
     SHOWRETURN_P
@@ -163,9 +171,6 @@ ALIGN 32
     MOV  ESI,PMMESSAGE
     CALL SHOWSTR_P
     SHOWRETURN_P
-    
-    CALL DISPMEM_P
-
 
     JMP2R3
   %INCLUDE "lib_p.inc"
