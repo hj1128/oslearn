@@ -1,10 +1,10 @@
 %INCLUDE "lib_macro.inc"
 %INCLUDE "pm.inc"
 
-PAGEDIRBASE0                    EQU  200000H
-PAGETBLBASE0                    EQU  201000H
-PAGEDIRBASE1                    EQU  210000H
-PAGETBLBASE1                    EQU  211000H
+PAGEDIRBASE0                    EQU  200000H          ;2M
+PAGETBLBASE0                    EQU  201000H          ;2M +  4K
+PAGEDIRBASE1                    EQU  210000H          ;2M + 64K
+PAGETBLBASE1                    EQU  211000H          ;2M + 64K + 4K
 
 LINEARADDRDEMO                  EQU  00401000H
 PROCFOO                         EQU  00401000H
@@ -19,7 +19,7 @@ PROCPAGINGDEMO                  EQU  00301000H
   LABEL_DESC_VIDEO           :  Descriptor    0B8000H,      0FFFFH, DA_DRW              + DA_DPL3  
   LABEL_DESC_DATA            :  Descriptor    0,       DATALEN - 1, DA_DRW              + DA_DPL3
   LABEL_DESC_STACK           :  Descriptor    0,        TOPOFSTACK, DA_DRWA     + DA_32
-  LABEL_DESC_CODE32          :  Descriptor    0,     CODE32LEN - 1, DA_CR       + DA_32
+  LABEL_DESC_CODE32          :  Descriptor    0,     CODE32LEN - 1, DA_CR       + DA_32                    ;属性中增加了R，允许读取，就可以读出并写入目的地址了
   LABEL_DESC_P2R             :  Descriptor    0,            0FFFFH, DA_C
   LABEL_DESC_CGCODE          :  Descriptor    0,     CGCODELEN - 1, DA_C        + DA_32
   LABEL_DESC_CGATE           :  Gate SELECTORCGCODE,    0,       0, DA_386CGate         + DA_DPL3
@@ -28,7 +28,7 @@ PROCPAGINGDEMO                  EQU  00301000H
   LABEL_DESC_CODE3           :  Descriptor    0,      CODE3LEN - 1, DA_C        + DA_32 + DA_DPL3
   LABEL_DESC_PAGEDIR         :  Descriptor    PAGEDIRBASE1,   4095, DA_DRW
   LABEL_DESC_PAGETBL         :  Descriptor    PAGETBLBASE1,   1023, DA_DRW|DA_LIMIT_4K
-  LABEL_DESC_FLAT_C          :  Descriptor    0,           0FFFFFH, DA_CR|DA_32|DA_LIMIT_4K                ;0-4G
+  LABEL_DESC_FLAT_C          :  Descriptor    0,           0FFFFFH, DA_CR|DA_32|DA_LIMIT_4K                ;0-4G    段长度1M，每1个页目录对应4K页表。分页前，线性地址=物理地址，可以直接写入
   LABEL_DESC_FLAT_RW         :  Descriptor    0,           0FFFFFH, DA_DRW|DA_LIMIT_4K                     ;0-4G
   
   GDTLEN                        EQU  $ - LABEL_GDT

@@ -164,7 +164,7 @@ SETPAGE2:
       ;XOR  EDI,EDI
       MOV  EDI,PAGETBLBASE0
       XOR  EAX,EAX
-      MOV  EAX,PG_P|PG_USU|PG_RWW
+      MOV  EAX,PG_P|PG_USU|PG_RWW       ;在连续地址中，线性地址=物理地址
       .PAGETBLOOP:
         STOSD
 	ADD EAX,4096
@@ -216,9 +216,10 @@ MEMCPY:
 
 PAGINGDEMO:
       MOV  AX,CS
-      MOV  DS,AX
+      MOV  DS,AX                          ;所在段属性必须可读(+R  DA_CR)，否则死机。查了无数遍才查出来的:) 
+                                          ;将ax对应段选择符中隐含的段描述符信息也赋值给ds中寄存器隐含的部分?
       MOV  AX,SELECTORFLATRW
-      MOV  ES,AX
+      MOV  ES,AX                          ;分页前，线性地址=物理地址，可以直接写入
 
       PUSH LENFOO
       PUSH OFFSETFOO
@@ -245,6 +246,9 @@ PAGINGDEMO:
       CALL SETPAGE2
       CALL SELECTORFLATC:PROCPAGINGDEMO
       CALL PSWITCH
+      ;PSWITCH是在分页后，通过计算，将LINEARADDRDEMO对应的物理地址计算出来，
+      ;直接将PROCBAR的地址值写入该线性地址位置
+      ;简单粗暴!!!
       CALL SELECTORFLATC:PROCPAGINGDEMO
 
       RET
@@ -253,7 +257,7 @@ PAGINGDEMOPROC:
 OFFSETPAGINGDEMOPROC            EQU  PAGINGDEMOPROC - $$
       MOV  EAX,LINEARADDRDEMO
       CALL EAX
-      RETF
+      RETF                                                         ;是段外部函数，从段外调用，所以是retf
 LENPAGINGDEMOALL                EQU  $ - PAGINGDEMOPROC
 
 FOO:
@@ -305,19 +309,38 @@ PSWITCH:
 	ADD EAX,4096
 	LOOP .PSWITCH2
 
-      MOV  EAX,LINEARADDRDEMO
-      SHR  EAX,22
-      MOV  EBX,4096
-      MUL  EBX
+      ;  线性地址    10BIT      10BIT     12BIT
+      ;        CR3-->PDE   ---> PTD   ---> P_ADDR      
+      ;  CR3--------图书馆起始位置
+      ;  PDE--------书籍大类---标明楼层，共1024楼，每楼使用4行
+      ;  PTD--------书籍小类---标明房间，共1024间，每间使用4行
+      ;  P_ADDR-----书架顺序---标明架号, 共1024*4=4K排，每排使用4行，默认值为0
+      ;  全部记录在一个本子上
+
+      MOV  EAX,LINEARADDRDEMO        ;将其作为线性地址
+      SHR  EAX,22                    ;获取楼层号
+      MOV  EBX,4096                  ;每层楼占1024间（每间占4行），获取楼层在本子上的起始位置(从PTD位置算起）
+      MUL  EBX                       ;每层楼占1024间（每间占4行），获取楼层在本子上的起始位置(从PTD位置算起）
       MOV  ECX,EAX
-      MOV  EAX,LINEARADDRDEMO
-      SHR  EAX,12
-      AND  EAX,03FFH
-      MOV  EBX,4
-      MUL  EBX
-      ADD  EAX,ECX
-      ADD  EAX,PAGETBLBASE1
-      MOV  DWORD [ES:EAX],PROCBAR|PG_P|PG_USU|PG_RWW
+
+      MOV  EAX,LINEARADDRDEMO        ;获取PTD序号
+      SHR  EAX,12                    ;获取PTD序号
+      AND  EAX,03FFH                 ;获取PTD序号               
+      MOV  EBX,4                     ;获取房间所在行号（每间占4行）,从楼层位置算起
+      MUL  EBX                       ;获取房间所在行号（每间占4行）,从楼层位置算起
+      ADD  EAX,ECX                   ;把行号位置加上楼层位置
+      ADD  EAX,PAGETBLBASE1          ;加上图书馆起始位置
+      ;以上，是在分页后，通过计算，将LINEARADDRDEMO对应的物理地址计算出来，
+      ;下一步，直接将PROCBAR的地址值写入该线性地址位置
+      ;简单粗暴!!!
+      PUSH EAX
+      MOV  EAX,DWORD [ES:EAX]
+      call SHOWEAX_HEX_P
+      POP  EAX
+      MOV  DWORD [ES:EAX],PROCBAR|PG_P|PG_USU|PG_RWW    
+      MOV  EAX,DWORD [ES:EAX]
+      CALL SHOWEAX_HEX_P
+      
 
       MOV  EAX,PAGEDIRBASE1
       MOV  CR3,EAX
