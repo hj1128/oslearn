@@ -1,244 +1,195 @@
-%INCLUDE "lib_macro.inc"
-%INCLUDE "pm.inc"
-
-PAGEDIRBASE0                    EQU  200000H          ;2M
-PAGETBLBASE0                    EQU  201000H          ;2M +  4K
-PAGEDIRBASE1                    EQU  210000H          ;2M + 64K
-PAGETBLBASE1                    EQU  211000H          ;2M + 64K + 4K
-
-LINEARADDRDEMO                  EQU  00401000H
-PROCFOO                         EQU  00401000H
-PROCBAR                         EQU  00501000H
-PROCPAGINGDEMO                  EQU  00301000H
-
   ORG  0100H
   JMP  LABEL_BEGIN
-[SECTION .GDT]
-  LABEL_GDT                  :  Descriptor    0,                 0, 0
-  LABEL_DESC_NORMAL          :  Descriptor    0,            0FFFFH, DA_DRW
-  LABEL_DESC_VIDEO           :  Descriptor    0B8000H,      0FFFFH, DA_DRW              + DA_DPL3  
-  LABEL_DESC_DATA            :  Descriptor    0,       DATALEN - 1, DA_DRW              + DA_DPL3
-  LABEL_DESC_STACK           :  Descriptor    0,        TOPOFSTACK, DA_DRWA     + DA_32
-  LABEL_DESC_CODE32          :  Descriptor    0,     CODE32LEN - 1, DA_CR       + DA_32                    ;属性中增加了R，允许读取，就可以读出并写入目的地址了
-  LABEL_DESC_P2R             :  Descriptor    0,            0FFFFH, DA_C
-  LABEL_DESC_CGCODE          :  Descriptor    0,     CGCODELEN - 1, DA_C        + DA_32
-  LABEL_DESC_CGATE           :  Gate SELECTORCGCODE,    0,       0, DA_386CGate         + DA_DPL3
-  LABEL_DESC_LDT             :  Descriptor    0,        LDTLEN - 1, DA_LDT
-  LABEL_DESC_STACK3          :  Descriptor    0,       TOPOFSTACK3, DA_DRWA     + DA_32 + DA_DPL3
-  LABEL_DESC_CODE3           :  Descriptor    0,      CODE3LEN - 1, DA_C        + DA_32 + DA_DPL3
-  LABEL_DESC_PAGEDIR         :  Descriptor    PAGEDIRBASE1,   4095, DA_DRW
-  LABEL_DESC_PAGETBL         :  Descriptor    PAGETBLBASE1,   1023, DA_DRW|DA_LIMIT_4K
-  LABEL_DESC_FLAT_C          :  Descriptor    0,           0FFFFFH, DA_CR|DA_32|DA_LIMIT_4K                ;0-4G    段长度1M，每1个页目录对应4K页表。分页前，线性地址=物理地址，可以直接写入
-  LABEL_DESC_FLAT_RW         :  Descriptor    0,           0FFFFFH, DA_DRW|DA_LIMIT_4K                     ;0-4G
-  
-  GDTLEN                        EQU  $ - LABEL_GDT
-  GDTPTR                        DW   GDTLEN - 1
-                                DD   0
-  SELECTORNORMAL                EQU  LABEL_DESC_NORMAL  - LABEL_GDT
-  SELECTORVIDEO                 EQU  LABEL_DESC_VIDEO   - LABEL_GDT
-  SELECTORDATA                  EQU  LABEL_DESC_DATA    - LABEL_GDT  
-  SELECTORSTACK                 EQU  LABEL_DESC_STACK   - LABEL_GDT
-  SELECTORCODE32                EQU  LABEL_DESC_CODE32  - LABEL_GDT
-  SELECTORP2R                   EQU  LABEL_DESC_P2R     - LABEL_GDT
-  SELECTORCGCODE                EQU  LABEL_DESC_CGCODE  - LABEL_GDT
-  SELECTORCGATE                 EQU  LABEL_DESC_CGATE   - LABEL_GDT + SA_RPL3
-  SELECTORLDT                   EQU  LABEL_DESC_LDT     - LABEL_GDT
-  SELECTORSTACK3                EQU  LABEL_DESC_STACK3  - LABEL_GDT + SA_RPL3
-  SELECTORCODE3                 EQU  LABEL_DESC_CODE3   - LABEL_GDT + SA_RPL3
-  SELECTORPAGEDIR               EQU  LABEL_DESC_PAGEDIR - LABEL_GDT
-  SELECTORPAGETBL               EQU  LABEL_DESC_PAGETBL - LABEL_GDT
-  SELECTORFLATC                 EQU  LABEL_DESC_FLAT_C  - LABEL_GDT
-  SELECTORFLATRW                EQU  LABEL_DESC_FLAT_RW - LABEL_GDT
-;END OF [SECTION .GDT]
 
-[SECTION .LDT]
-  LABEL_LDT:
-  LABEL_DESC_LCODE           :  Descriptor    0,      LCODELEN - 1, DA_C + DA_32
-  LDTLEN                        EQU  $ - LABEL_LDT
-  SELECTORLCODE                 EQU  LABEL_DESC_LCODE   - LABEL_LDT + SA_TIL
-;END OF [SECTION .LDT]
+%MACRO SHOWCHAR 3               ;使用方法 SHOWCHAR    显示位置，颜色，字符
+    MOV  EDI,[%1]
+    MOV  AH,%2
+    MOV  AL,%3
+    MOV  [GS:EDI],AX
+    ADD  EDI,2
+    MOV  [%1],EDI
+%ENDMACRO
+%MACRO SHOWSTR 3                ;使用方法 SHOWSTR     显示位置，颜色，字符串位置
+    MOV  ESI,%3
+    MOV  EDI,[%1]
+    MOV  AH,%2
+    .SHOWSTRLOOP:
+      LODSB
+      TEST  AL,AL
+      JZ    .SHOWSTROK
+      MOV  [GS:EDI],AX
+      ADD  EDI,2
+      JMP  .SHOWSTRLOOP
+    .SHOWSTROK:
+      MOV  [%1],EDI
+%ENDMACRO
+%MACRO SHOWRETURN 1             ;使用方法 SHOWRETURN  显示位置
+    MOV  EAX,[%1]
+    MOV  BL,160
+    DIV  BL
+    AND  EAX,0FFH
+    INC  EAX
+    MOV  BL,160
+    MUL  BL
+    MOV  [%1],EAX
+%ENDMACRO
+%MACRO MEMCHK 2                 ;使用方法 MEMCHK      存储缓冲位置，内存段数量
+    MOV  EBX,0
+    MOV  ECX,20
+    MOV  DI,%1
+    .MEMCHKLOOP:
+      MOV  EAX,0E820H
+      MOV  EDX,534D4150H
+      INT  15H
+      JC   .MEMCHKFAIL
+      ADD  DI,20
+      INC  DWORD [%2]
+      CMP  EBX,0
+      JZ   .MEMCHKOK
+      JMP  .MEMCHKLOOP
+      .MEMCHKFAIL:
+        MOV  DWORD [%2],0
+      .MEMCHKOK:
+        NOP
+%ENDMACRO
+%MACRO DISPMEM 10
+;使用方法 DISPMEM  显示位置     ,存储缓冲位置，内存段数量,内存大小, 内存范围描述符结构, ARDS类型  , 基础地址低位, 长度低位, 标题栏        , 颜色        
+;使用方法 DISPMEM  _SHOWPOSITION,_MEMCHKBUF  , _MCRNUMBER,_MEMSIZE, _ARDSTRUCT        , _ARDSTYPE , _BASEADDRL  , _LENGTHL, _ARDSTURCTINFO, 0CH
+    MOV  ESI,%9
+    MOV  EDI,[%1]
+    MOV  AH,%10
+    .SHOWARDSINFOLOOP:
+      LODSB
+      TEST  AL,AL
+      JZ    .SHOWARDSINFOK
+      MOV  [GS:EDI],AX
+      ADD  EDI,2
+      JMP  .SHOWARDSINFOLOOP
+    .SHOWARDSINFOK:
+      MOV  [%1],EDI
+    SHOWRETURN    %1
 
-[SECTION .DATA]
-ALIGN 32
-[BITS 32]
-  LABEL_DATA:
-    _PMMESSAGE               :  DB   "NOW IN PROTECT MODE!^-^",0
-    _POSITION                :  DD   (80*2+0)*2
-    _SPVALUEINREALMODE       :  DW   0
-    _MEMCHKBUF               :  TIMES  256  DD  0
-    _MCRNUMBER               :  DD   0
-    _MEMSIZE                 :  DD   0
-    _PAGETABLENUMBER         :  DD   0
-    _ARDSTRUCT               :
-      _BASEADDRLOW           :  DD   0
-      _BASEADDRHIGH          :  DD   0
-      _LENGTHLOW             :  DD   0
-      _LENGTHHIGH            :  DD   0
-      _ARDSTRUCTTYPE         :  DD   0
+    MOV  ESI,%2
+    MOV  ECX,[%3]
+    CLD
+    .DISPMEMLOOP:
+      MOV  EDX,5
+      MOV  EDI,%5
+      .ARDSLOOP:
+        LODSD
+        STOSD
+        SHOWEAX_HEX  %1,EAX,%10
+	DEC  EDX
+	CMP  EDX,0
+	JNE  .ARDSLOOP
+        CMP  DWORD [%6],1
+        JNE  .SHOWRETURN_ARDS
+	MOV  EAX,[%7]
+	ADD  EAX,[%8]
+	CMP  EAX,[%4]
+	JB   .SHOWRETURN_ARDS
+	MOV  [%4],EAX
+	.SHOWRETURN_ARDS:
+	  SHOWRETURN %1
+    LOOP .DISPMEMLOOP
+    SHOWEAX_HEX  %1,[%4],%10
+%ENDMACRO
+%MACRO SHOWEAX_HEX_BASE 0       ;使用时需预先设置好EAX,EDI,AH(使用DH来中转)
+  PUSH ECX
+  MOV  ECX,8
+  .EAXLOOP:
+    PUSH EAX
+    AND  EAX,0F0000000H
+    SHR  EAX,28
+    AND  EAX,0FH
+    CMP  AL,9
+    JA   .ABOVE
+    ADD  AL,'0'
+    JMP  .SHOWAL
+    .ABOVE:
+      SUB  AL,0AH
+      ADD  AL,'A'
+    .SHOWAL:
+      ;MOV  AH,0CH
+      MOV  AH,DH
+      MOV  [GS:EDI],AX
+      ADD  EDI,2
+    POP  EAX
+    SHL  EAX,4
+  LOOP  .EAXLOOP
+  ;MOV  AH,0CH
+  MOV  AH,DH
+  MOV  AL,'H'
+  MOV  [GS:EDI],AX
+  ADD  EDI,4
+  POP  ECX
+%ENDMACRO
+%MACRO SHOWEAX_HEX 3            ;使用方法  SHOWEAX_HEX  显示位置，EAX值   
+    PUSH EAX                    ;同时要保持原有现场的EDI，以及EAX
+    PUSH EDI
+    MOV  EDI,[%1]
+    MOV  EAX,%2
+    PUSH EDX
+    MOV  DH,%3
+    CALL SHOWEAX_HEX_PROC       ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;在保护模式下,或者说不同段内，是否可以使用同名过程？
+    POP  EDX
+    MOV  [%1],EDI
+    POP  EDI
+    POP  EAX
+%ENDMACRO
 
-    PMMESSAGE                   EQU  _PMMESSAGE           - $$
-    POSITION                    EQU  _POSITION            - $$
-    SPVALUEINREALMODE           EQU  _SPVALUEINREALMODE   - $$
-    MEMCHKBUF                   EQU  _MEMCHKBUF           - $$
-    MCRNUMBER                   EQU  _MCRNUMBER           - $$
-    MEMSIZE                     EQU  _MEMSIZE             - $$
-    PAGETABLENUMBER             EQU  _PAGETABLENUMBER     - $$
-    ARDSTRUCT                   EQU  _ARDSTRUCT           - $$
-      BASEADDRLOW               EQU  _BASEADDRLOW         - $$
-      BASEADDRHIGH              EQU  _BASEADDRHIGH        - $$
-      LENGTHLOW                 EQU  _LENGTHLOW           - $$
-      LENGTHHIGH                EQU  _LENGTHHIGH          - $$
-      ARDSTRUCTTYPE             EQU  _ARDSTRUCTTYPE       - $$
+  _SPVALUEINREALMODE         :  DW   0
+  _SHOWPOSITION              :  DD   (80*10+0)*2
+  _REALMESSAGE               :  DB   "NOW IN REAL MODE!",0
+  _MEMCHKBUF                 :  TIMES 256  DB   0
+  _MCRNUMBER                 :  DD   0
+  _MEMSIZE                   :  DD   0
+  _ARDSTRUCTINFO             :  DB   "BASEADDRL BASEADDRH  LENGTHL   LENGTHH  ARDSTYPE",0
+  _ARDSTRUCT                 :
+    _BASEADDRL               :  DD   0
+    _BASEADDRH               :  DD   0
+    _LENGTHL                 :  DD   0
+    _LENGTHH                 :  DD   0
+    _ARDSTYPE                :  DD   0
 
-  DATALEN                       EQU  $ - LABEL_DATA
-;END OF [SECTION .DATA]
+  SHOWPOSITION                  EQU  _SHOWPOSITION  - $$
+  MEMCHKBUF                     EQU  _MEMCHKBUF     - $$
+  MCRNUMBER                     EQU  _MCRNUMBER     - $$
+  MEMSIZE                       EQU  _MEMSIZE       - $$
+  ARDSTRUCTINFO                 EQU  _ARDSTRUCTINFO - $$
+  ARDSTRUCT                     EQU  _ARDSTRUCT     - $$
+    BASEADDRL                   EQU  _BASEADDRL     - $$
+    BASEADDRH                   EQU  _BASEADDRH     - $$
+    LENGTHL                     EQU  _LENGTHL       - $$
+    LENGTHH                     EQU  _LENGTHH       - $$
+    ARDSTYPE                    EQU  _ARDSTYPE      - $$
 
-[SECTION .STACK]
-ALIGN 32
-  LABEL_STACK:
-    TIMES   256                 DB   0
-  TOPOFSTACK                    EQU  $ - LABEL_STACK - 1
-;END OF [SECTION .STACK]
-
-[SECTION .STACK3]
-ALIGN 32
-  LABEL_STACK3:
-    TIMES   256                 DB   0
-  TOPOFSTACK3                   EQU  $ - LABEL_STACK3 - 1
-;END OF [SECTION .STACK3]
-
-[SECTION .REAL]  
-[BITS 16]
   LABEL_BEGIN:
-    INITREG
-    MOV  [LABEL_GOBACKTO_REAL + 3],AX
+    MOV  AX,CS
+    MOV  ES,AX
+    MOV  DS,AX
+    MOV  SS,AX
+    MOV  SP,0100H
     MOV  [_SPVALUEINREALMODE],SP
-    MOV  AL,'R'
-    SHOWCHAR
 
-    CALL MEMCHK
-    MOV  EAX,[_MCRNUMBER]
-    CALL SHOWEAX_HEX 
-    SHOWRETURN
-    ;CALL DISPMEM
+    MOV  AX,0B800H
+    MOV  GS,AX
+    
+    SHOWCHAR      _SHOWPOSITION , 0AH           , 'R'
+    SHOWRETURN    _SHOWPOSITION
+    SHOWSTR       _SHOWPOSITION , 0BH           , _REALMESSAGE
+    SHOWRETURN    _SHOWPOSITION
 
-    INITDESC LABEL_DATA    , LABEL_DESC_DATA
-    INITDESC LABEL_STACK   , LABEL_DESC_STACK
-    INITDESC LABEL_CODE32  , LABEL_DESC_CODE32
-    INITDESC LABEL_P2R     , LABEL_DESC_P2R
-    INITDESC LABEL_CGCODE  , LABEL_DESC_CGCODE
-    INITDESC LABEL_LDT     , LABEL_DESC_LDT
-    INITDESC LABEL_LCODE   , LABEL_DESC_LCODE
-    INITDESC LABEL_STACK3  , LABEL_DESC_STACK3
-    INITDESC LABEL_CODE3   , LABEL_DESC_CODE3
-    INITGDT
-    LGDT [GDTPTR]
-    CLI
-    OPENA20
-    SETCR0PE
-    JMP  DWORD SELECTORCODE32:0
-  LABEL_REAL_ENTRY:
-    INITREG
-    MOV  SP,[_SPVALUEINREALMODE]
-    CLOSEA20
-    STI
-       
+    MEMCHK        _MEMCHKBUF    , _MCRNUMBER
+    SHOWEAX_HEX   _SHOWPOSITION , [_MCRNUMBER],0CH
+    SHOWRETURN    _SHOWPOSITION
+    DISPMEM       _SHOWPOSITION , _MEMCHKBUF,_MCRNUMBER,_MEMSIZE,_ARDSTRUCT,_ARDSTYPE,_BASEADDRL,_LENGTHL,_ARDSTRUCTINFO,0DH
+    SHOWRETURN    _SHOWPOSITION
+
+
     MOV  AX,4C00H
     INT  21H
-  %INCLUDE "lib_r.inc"
-;END OF [SECTION .REAL]      
 
-[SECTION .CODE32]
-[BITS 32]
-  LABEL_CODE32:
-    MOV  AX,SELECTORDATA
-    MOV  DS,AX
-    MOV  ES,AX
-    MOV  AX,SELECTORVIDEO
-    MOV  GS,AX
-    MOV  AX,SELECTORSTACK
-    MOV  SS,AX
-    MOV  ESP,TOPOFSTACK
-
-    CALL DISPMEM_P
-    ;CALL SETPAGE
-    CALL PAGINGDEMO
-      
-    MOV  AL,'P'
-    SHOWCHAR_P
-    SHOWRETURN_P
-
-    MOV  ESI,PMMESSAGE
-    CALL SHOWSTR_P
-    SHOWRETURN_P
-
-    JMP2R3
-  %INCLUDE "lib_p.inc"
-  CODE32LEN                      EQU  $ - LABEL_CODE32
-;END OF [SECTION .CODE32]  
-
-[SECTION .CODE3]
-[BITS 32]
-  LABEL_CODE3:
-    MOV  AX,SELECTORDATA
-    MOV  DS,AX
-    MOV  AX,SELECTORVIDEO
-    MOV  GS,AX
-
-    MOV  AL,'3'
-    SHOWCHAR_P
-    
-    CALL SELECTORCGATE:0
-  CODE3LEN                      EQU  $ - LABEL_CODE3
-;END OF [SECTION .CODE3]
-
-[SECTION .CGCODE]
-[BITS 32]
-  LABEL_CGCODE:
-    MOV  AX,SELECTORDATA
-    MOV  DS,AX
-    MOV  AX,SELECTORVIDEO
-    MOV  GS,AX
-    MOV  AX,SELECTORSTACK
-    MOV  SS,AX
-    MOV  ESP,TOPOFSTACK
-
-    MOV  AL,'G'
-    SHOWCHAR_P
-    
-    MOV  AX,SELECTORLDT
-    LLDT AX
-    JMP  SELECTORLCODE:0
-  CGCODELEN                     EQU  $ - LABEL_CGCODE
-;END OF [SECTION .CGCODE]
-
-[SECTION .LCODE]
-[BITS 32]
-  LABEL_LCODE:
-    MOV  AX,SELECTORDATA
-    MOV  DS,AX
-    MOV  AX,SELECTORVIDEO
-    MOV  GS,AX
-    MOV  AX,SELECTORSTACK
-    MOV  SS,AX
-    MOV  ESP,TOPOFSTACK
-
-    MOV  AL,'L'
-    SHOWCHAR_P
-    
-    JMP  SELECTORP2R:0
-  LCODELEN                      EQU  $ - LABEL_LCODE
-;END OF [SECTION .LCODE]
-
-[SECTION .P2R]
-ALIGN 32
-[BITS 16]
-  LABEL_P2R:
-    INITREGP2R
-    ;CANCELCR0PE
-    CANCELCR0PE_PG
-  LABEL_GOBACKTO_REAL:
-    JMP  0:LABEL_REAL_ENTRY
-;END OF [SECTION .P2R]        
-
-    
+SHOWEAX_HEX_PROC:
+  SHOWEAX_HEX_BASE
+  RET
