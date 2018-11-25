@@ -1,16 +1,6 @@
 %INCLUDE "pm.inc"
 %INCLUDE "lib_macro.inc"
 
-PAGEDIRBASE0                    EQU  200000H
-PAGETBLBASE0                    EQU  201000H
-PAGEDIRBASE1                    EQU  210000H
-PAGETBLBASE1                    EQU  211000H
-
-LINEADDRDEMO                    EQU  00401000H
-PROCFOO                         EQU  00401000H
-PROCBAR                         EQU  00501000H
-PROCPAGEDEMO                    EQU  00301000H
-
   ORG  0100H
   JMP  LABEL_BEGIN
 
@@ -27,8 +17,6 @@ PROCPAGEDEMO                    EQU  00301000H
     LABEL_DESC_CGATE         :  Gate   SELECTORCGCODE  ,      0,   0, DA_386CGate     + DA_DPL3
     LABEL_DESC_CODE3         :  Descriptor    0,        CODE3LEN - 1, DA_C    + DA_32 + DA_DPL3
     LABEL_DESC_LDT           :  Descriptor    0,          LDTLEN - 1, DA_LDT
-    LABEL_DESC_FLATC         :  Descriptor    0,             0FFFFFH, DA_CR|DA_32|DA_LIMIT_4K
-    LABEL_DESC_FLATRW        :  Descriptor    0,             0FFFFFH, DA_DRW|DA_LIMIT_4K
 
     GDTLEN                      EQU  $ - LABEL_GDT
     GDTPTR                      DW   GDTLEN - 1
@@ -44,8 +32,6 @@ PROCPAGEDEMO                    EQU  00301000H
     SELECTORCGATE               EQU  LABEL_DESC_CGATE    - LABEL_GDT
     SELECTORCODE3               EQU  LABEL_DESC_CODE3    - LABEL_GDT + SA_RPL3
     SELECTORLDT                 EQU  LABEL_DESC_LDT      - LABEL_GDT
-    SELECTORFLATC               EQU  LABEL_DESC_FLATC    - LABEL_GDT
-    SELECTORFLATRW              EQU  LABEL_DESC_FLATRW   - LABEL_GDT
     ;END OF [SECTION .GDT]
 
 [SECTION .LDT]
@@ -170,11 +156,11 @@ PROCPAGEDEMO                    EQU  00301000H
       MOV  AX,SELECTORDATA
       MOV  DS,AX
       MOV  ES,AX
-      SHOWCHAR      SHOWPOSITION, 0AH      , 'P'
-      SHOWRETURN    SHOWPOSITION
       DISPMEM_P     SHOWPOSITION, MEMCHKBUF, MCRNUMBER, MEMSIZE, ARDSTRUCT, ARDSTYPE, BASEADDRL, LENGTHL, ARDSTRUCTINFO, 0DH
+      SHOWRETURN    SHOWPOSITION
+      SHOWEAX_HEX_P SHOWPOSITION,[MEMSIZE],0CH
+      SHOWCHAR      SHOWPOSITION, 0AH      , 'P'
 
-      CALL PAGEDEMO_MAIN
       PUSH SELECTORSTACK3
       PUSH TOPOFSTACK3
       PUSH SELECTORCODE3
@@ -182,175 +168,6 @@ PROCPAGEDEMO                    EQU  00301000H
       RETF
     SHOWEAX_HEX_PROC_P:
       SHOWEAX_HEX_BASE
-      RET
-
-    FOO:
-      OFFSETFOO                 EQU  $ - $$
-      MOV  AH,0CH
-      MOV  AL,'F'
-      MOV  [GS:(80*10+70)*2],AX
-      MOV  AL,'O'
-      MOV  [GS:(80*10+71)*2],AX
-      MOV  AL,'O'
-      MOV  [GS:(80*10+72)*2],AX
-      RET
-      FOOLEN                    EQU  $ - FOO
-    BAR:
-      OFFSETBAR                 EQU  $ - $$
-      MOV  AH,0AH
-      MOV  AL,'B'
-      MOV  [GS:(80*11+70)*2],AX
-      MOV  AL,'A'
-      MOV  [GS:(80*11+71)*2],AX
-      MOV  AL,'R'
-      MOV  [GS:(80*11+72)*2],AX
-      RET
-      BARLEN                    EQU  $ - BAR
-    PAGEDEMO:
-      OFFSETPAGEDEMO            EQU  $ - $$
-      MOV  EAX,LINEADDRDEMO
-      CALL EAX
-      RETF
-      PAGEDEMOLEN               EQU  $ - PAGEDEMO
-    PAGEDEMO_MAIN:
-      MOV  AX,CS                ;设置内存复制环境
-      MOV  DS,AX
-      MOV  AX,SELECTORFLATRW
-      MOV  ES,AX
-      
-      PROCPY PROCFOO,OFFSETFOO,FOOLEN
-      PROCPY PROCBAR,OFFSETBAR,BARLEN
-      PROCPY PROCPAGEDEMO,OFFSETPAGEDEMO,PAGEDEMOLEN
-    
-      MOV  AX,SELECTORDATA      ;恢复原现场
-      MOV  DS,AX
-      MOV  ES,AX
-
-      CALL SETPAGE0
-      CALL SELECTORFLATC:PROCPAGEDEMO
-      CALL SETPAGE1
-      CALL SELECTORFLATC:PROCPAGEDEMO
-      RET
-    MEMCPY:
-      PUSH EBP
-      MOV  EBP,ESP
-      PUSH ESI
-      PUSH EDI
-      PUSH ECX
-
-      MOV  EDI,[EBP + 8]
-      MOV  ESI,[EBP + 12]
-      MOV  ECX,[EBP + 16]
-
-      .MEMCPYLOOP:
-        LODSB
-	STOSB
-        LOOP .MEMCPYLOOP
-
-      MOV  EAX,[EBP + 8]
-
-      POP  ECX
-      POP  EDI
-      POP  ESI
-      MOV  ESP,EBP
-      POP  EBP
-
-      RET
-    SETPAGE0:
-      XOR  EDX,EDX
-      MOV  EAX,[MEMSIZE]
-      MOV  EBX,400000H
-      DIV  EBX
-      CMP  EDX,0
-      JZ   .PAGEDIROK
-      INC  EAX
-      .PAGEDIROK:
-        MOV  [PAGENUMBER],EAX
-      MOV  ECX,EAX
-
-      MOV  AX,SELECTORFLATRW
-      MOV  ES,AX
-      MOV  EDI,PAGEDIRBASE0
-      XOR  EAX,EAX
-      MOV  EAX,PAGETBLBASE0|PG_P|PG_USU|PG_RWW
-      .PAGEDIR0LOOP:
-        STOSD
-	ADD EAX,4096
-	LOOP .PAGEDIR0LOOP
-
-      MOV  EAX,[PAGENUMBER]
-      MOV  EBX,1024
-      MUL  EBX
-      MOV  ECX,EAX
-
-      MOV  EDI,PAGETBLBASE0
-      XOR  EAX,EAX
-      MOV  EAX,PG_P|PG_USU|PG_RWW
-      .PAGETBL0LOOP:
-        STOSD
-	ADD EAX,4096
-	LOOP .PAGETBL0LOOP
-      
-      MOV  EAX,PAGEDIRBASE0
-      MOV  CR3,EAX
-      MOV  EAX,CR0
-      OR   EAX,80000000H
-      MOV  CR0,EAX
-      NOP
-      NOP
-      RET
-    SETPAGE1:
-      MOV  EAX,[MEMSIZE]
-      MOV  EBX,400000H
-      DIV  EBX
-      TEST EDX,EDX
-      JZ   .PAGEDIR1OK
-      INC  EAX
-      .PAGEDIR1OK:
-        MOV  [PAGENUMBER],EAX
-      
-      MOV  ECX,EAX
-      MOV  AX,SELECTORFLATRW
-      MOV  ES,AX
-      MOV  EDI,PAGEDIRBASE1
-      XOR  EAX,EAX
-      MOV  EAX,PAGETBLBASE1|PG_P|PG_USU|PG_RWW
-      .PAGEDIR1LOOP:
-        STOSD
-	ADD EAX,4096
-	LOOP .PAGEDIR1LOOP
-
-      MOV  EAX,[PAGENUMBER]
-      MOV  EBX,1024
-      MUL  EBX
-      MOV  ECX,EAX
-      MOV  EDI,PAGETBLBASE1
-      XOR  EAX,EAX
-      MOV  EAX,PG_P|PG_USU|PG_RWW
-      .PAGETBL1LOOP:
-        STOSD
-	ADD EAX,4096
-	LOOP .PAGETBL1LOOP
-      
-      MOV  EAX,LINEADDRDEMO
-      SHR  EAX,22
-      MOV  EBX,4096
-      MUL  EBX
-      MOV  ECX,EAX
-
-      MOV  EAX,LINEADDRDEMO
-      SHR  EAX,12
-      AND  EAX,03FFH
-      MOV  EBX,4
-      MUL  EBX
-
-      ADD  EAX,ECX
-      ADD  EAX,PAGETBLBASE1
-      MOV  DWORD [ES:EAX],PROCBAR|PG_P|PG_USU|PG_RWW
-
-      MOV  EAX,PAGEDIRBASE1
-      MOV  CR3,EAX
-      NOP
       RET
     CODE32LEN                   EQU  $ - LABEL_CODE32
   ;END OF [SECTION .CODE32]
